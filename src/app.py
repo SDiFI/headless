@@ -1,6 +1,7 @@
 from flask import current_app, jsonify
 from flask_apispec import marshal_with, use_kwargs
 from webargs.flaskparser import abort
+from twilio.twiml.voice_response import VoiceResponse
 
 from src import schemas
 
@@ -36,6 +37,17 @@ def handle_error(err):
         return jsonify({"message": message}), err.code, headers
     else:
         return jsonify({"message": message}), err.code
+
+
+@current_app.route("/call", methods=["POST"])
+def route_call():
+    try:
+        resp = VoiceResponse()
+        resp.say("Hello, you have reached the headless client.")
+        return str(resp), 200
+    except Exception as e:
+        current_app.logger.exception("Something went wrong.")
+        resp.say("The headless client is not available at this time. Please try again later.")
 
 
 @current_app.route("/foo", methods=["POST"])
