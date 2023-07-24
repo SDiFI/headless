@@ -1,3 +1,5 @@
+import base64
+import json
 from flask import current_app, jsonify
 from flask_apispec import marshal_with, use_kwargs
 from webargs.flaskparser import abort
@@ -52,8 +54,39 @@ def route_call():
         
 
 @sockets.route("/echo")
-def route_echo():
-    ...
+def route_echo(ws):
+    current_app.logger.info("Halló")
+
+    has_seen_media: bool = False
+    message_count: int = 0
+
+    while not ws.closed:
+        message = ws.receive()
+        if message is None:
+            current_app.logger.info("No message received...")
+            continue
+        
+        data = json.loads(message)
+        
+        if data['event'] == "connected":
+            current_app.logger.info("Connected Message received: {}".format(message))
+        if data['event'] == "start":
+            current_app.logger.info("Start Message received: {}".format(message))
+        if data['event'] == "media":
+            if not has_seen_media:
+                current_app.logger.info("Media message: {}".format(message))
+                payload = data['media']['payload']
+                current_app.logger.info("Payload is: {}".format(payload))
+                chunk = base64.b64decode(payload)
+                current_app.logger.info("That's {} bytes".format(len(chunk)))
+                current_app.logger.info("Additional media messages from WebSocket are being suppressed....")
+                has_seen_media = True
+        if data['event'] == "closed":
+            current_app.logger.info("Closed Message received: {}".format(message))
+            break
+        message_count += 1
+
+        current_app.logger.info("Connection closed. Received a total of {} messages".format(message_count))
 
 
 @current_app.route("/foo", methods=["POST"])
