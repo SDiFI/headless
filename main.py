@@ -1,5 +1,6 @@
-from src import init_app
+from src import init_server
 
-app = init_app()
+server = init_server()
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=9001, debug=True)
+    server.log.info(f"Server listening on port {str(server.server_port)}.")
+    server.serve_forever()

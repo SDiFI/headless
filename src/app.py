@@ -4,6 +4,7 @@ from webargs.flaskparser import abort
 from twilio.twiml.voice_response import VoiceResponse
 
 from src import schemas
+from src import sockets
 
 
 # TODO(Smári): Handle error codes 404 and 500
@@ -48,6 +49,11 @@ def route_call():
     except Exception as e:
         current_app.logger.exception("Something went wrong.")
         resp.say("The headless client is not available at this time. Please try again later.")
+        
+
+@sockets.route("/echo")
+def route_echo():
+    ...
 
 
 @current_app.route("/foo", methods=["POST"])
