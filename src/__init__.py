@@ -1,24 +1,20 @@
 import logging
 
 from flask import Flask
-from flask_sockets import Sockets
-from gevent import pywsgi
-from geventwebsocket.handler import WebSocketHandler
+from flask_sock import Sock
 
-PORT = 9001
+sock: Sock = Sock()
 
-sockets: Sockets = Sockets()
-
-def init_server():
-    server = Flask(__name__)
-    sockets.init_app(server)
-    server.logger.setLevel(logging.DEBUG)
+def init_app():
+    app = Flask(__name__)
+    sock.init_app(app)
+    app.logger.setLevel(logging.DEBUG)
     
-    with server.app_context():
+    app.config[
+        "SOCK_SERVER_OPTIONS"
+    ] = { "ping_interval": 25 }
+    app.config["PORT"] = 9001
+    
+    with app.app_context():
         import src.app
-        return pywsgi.WSGIServer(
-            ('', PORT),
-            server,
-            handler_class=WebSocketHandler,
-            log=server.logger,
-        )
+        return app

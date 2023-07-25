@@ -6,7 +6,7 @@ from webargs.flaskparser import abort
 from twilio.twiml.voice_response import VoiceResponse
 
 from src import schemas
-from src import sockets
+from src import sock
 
 
 # TODO(Smári): Handle error codes 404 and 500
@@ -51,42 +51,36 @@ def route_call():
     except Exception as e:
         current_app.logger.exception("Something went wrong.")
         resp.say("The headless client is not available at this time. Please try again later.")
-        
 
-@sockets.route("/echo")
+
+@sock.route("/echo")
 def route_echo(ws):
-    current_app.logger.info("Halló")
-
-    has_seen_media: bool = False
     message_count: int = 0
-
-    while not ws.closed:
+    while True:
         message = ws.receive()
         if message is None:
             current_app.logger.info("No message received...")
             continue
         
         data = json.loads(message)
-        
         if data['event'] == "connected":
-            current_app.logger.info("Connected Message received: {}".format(message))
+            current_app.logger.info("CONNECT: {}".format(message))
         if data['event'] == "start":
-            current_app.logger.info("Start Message received: {}".format(message))
+            current_app.logger.info("START: {}".format(message))
         if data['event'] == "media":
-            if not has_seen_media:
-                current_app.logger.info("Media message: {}".format(message))
-                payload = data['media']['payload']
-                current_app.logger.info("Payload is: {}".format(payload))
-                chunk = base64.b64decode(payload)
-                current_app.logger.info("That's {} bytes".format(len(chunk)))
-                current_app.logger.info("Additional media messages from WebSocket are being suppressed....")
-                has_seen_media = True
+            current_app.logger.info("MEDIA: {}".format(message))
+            current_app.logger.info(
+                "MEDIA PAYLOAD: {}".format(
+                    base64.b64decode(data['media']['payload'])
+                )
+            )
         if data['event'] == "closed":
-            current_app.logger.info("Closed Message received: {}".format(message))
+            current_app.logger.info("CLOSE: {}".format(message))
             break
         message_count += 1
 
-        current_app.logger.info("Connection closed. Received a total of {} messages".format(message_count))
+    ws.close()
+    current_app.logger.info("CONNECTION CLOSED. MSG COUNT: {}.".format(message_count))
 
 
 @current_app.route("/foo", methods=["POST"])
