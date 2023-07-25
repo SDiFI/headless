@@ -1,12 +1,12 @@
 import base64
 import json
+
 from flask import current_app, jsonify
 from flask_apispec import marshal_with, use_kwargs
-from webargs.flaskparser import abort
 from twilio.twiml.voice_response import VoiceResponse
+from webargs.flaskparser import abort
 
-from src import schemas
-from src import sock
+from src import schemas, sock
 
 
 # TODO(Smári): Handle error codes 404 and 500
@@ -50,7 +50,9 @@ def route_call():
         return str(resp), 200
     except Exception as e:
         current_app.logger.exception("Something went wrong.")
-        resp.say("The headless client is not available at this time. Please try again later.")
+        resp.say(
+            "The headless client is not available at this time. Please try again later."
+        )
 
 
 @sock.route("/echo")
@@ -61,20 +63,18 @@ def route_echo(ws):
         if message is None:
             current_app.logger.info("No message received...")
             continue
-        
+
         data = json.loads(message)
-        if data['event'] == "connected":
+        if data["event"] == "connected":
             current_app.logger.info("CONNECT: {}".format(message))
-        if data['event'] == "start":
+        if data["event"] == "start":
             current_app.logger.info("START: {}".format(message))
-        if data['event'] == "media":
+        if data["event"] == "media":
             current_app.logger.info("MEDIA: {}".format(message))
             current_app.logger.info(
-                "MEDIA PAYLOAD: {}".format(
-                    base64.b64decode(data['media']['payload'])
-                )
+                "MEDIA PAYLOAD: {}".format(base64.b64decode(data["media"]["payload"]))
             )
-        if data['event'] == "closed":
+        if data["event"] == "closed":
             current_app.logger.info("CLOSE: {}".format(message))
             break
         message_count += 1
@@ -107,23 +107,25 @@ def route_add_foo(**kwargs):
 @marshal_with(schemas.Error, code=500, description="Internal server error")
 def route_get_all_hemis():
     try:
-        return [
-            {
-                "demi": 1,
-                "semi": 2,
-                "quasi": 3,
-            },
-            {
-                "demi": 11,
-                "semi": 12,
-                "quasi": 13,
-            },
-            {
-                "demi": 21,
-                "semi": 22,
-                "quasi": 23,
-            },
-        ],
+        return (
+            [
+                {
+                    "demi": 1,
+                    "semi": 2,
+                    "quasi": 3,
+                },
+                {
+                    "demi": 11,
+                    "semi": 12,
+                    "quasi": 13,
+                },
+                {
+                    "demi": 21,
+                    "semi": 22,
+                    "quasi": 23,
+                },
+            ],
+        )
         200
     except Exception as e:
         print(f"Failed to get hemis! :(")
