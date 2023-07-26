@@ -1,4 +1,3 @@
-import base64
 import json
 
 from flask import current_app, jsonify
@@ -7,6 +6,7 @@ from twilio.twiml.voice_response import VoiceResponse
 from webargs.flaskparser import abort
 
 from src import schemas, sock
+from src.streaming_asr import StreamingASR
 
 
 # TODO(Smári): Handle error codes 404 and 500
@@ -57,30 +57,33 @@ def route_call():
 
 @sock.route("/echo")
 def route_echo(ws):
-    message_count: int = 0
-    while True:
-        message = ws.receive()
-        if message is None:
-            current_app.logger.info("No message received...")
-            continue
+    streaming_asr: StreamingASR = StreamingASR()
 
-        data = json.loads(message)
-        if data["event"] == "connected":
-            current_app.logger.info("CONNECT: {}".format(message))
-        if data["event"] == "start":
-            current_app.logger.info("START: {}".format(message))
-        if data["event"] == "media":
-            current_app.logger.info("MEDIA: {}".format(message))
-            current_app.logger.info(
-                "MEDIA PAYLOAD: {}".format(base64.b64decode(data["media"]["payload"]))
-            )
-        if data["event"] == "closed":
-            current_app.logger.info("CLOSE: {}".format(message))
-            break
-        message_count += 1
+    def feed_data():
+        try:
+            while True:
+                message = ws.receive()
+                if message is None:
+                    current_app.logger.info("No message received...")
+                    continue
 
-    ws.close()
-    current_app.logger.info("CONNECTION CLOSED. MSG COUNT: {}.".format(message_count))
+                data = json.loads(message)
+                if data["event"] == "connected":
+                    current_app.logger.info("CONNECT: {}".format(message))
+                if data["event"] == "start":
+                    current_app.logger.info("START: {}".format(message))
+                if data["event"] == "media":
+                    yield data["media"]["payload"]
+                if data["event"] == "closed":
+                    current_app.logger.info("CLOSE: {}".format(message))
+                    ws.close()
+                    break
+        except:
+            current_app.logger.exception("Something went wrong while receiving data.")
+
+    for result in streaming_asr.recognize_stream(feed_data()):
+        current_app.logger.info(result)
+    current_app.logger.info("CONNECTION CLOSED.")
 
 
 @current_app.route("/foo", methods=["POST"])
