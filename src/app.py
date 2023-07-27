@@ -1,4 +1,8 @@
+import audioop
+import base64
 import json
+from typing import Literal
+import requests
 
 from flask import current_app, jsonify
 from twilio.twiml.voice_response import VoiceResponse
@@ -57,6 +61,9 @@ def route_call():
 def route_echo(ws):
     streaming_asr: StreamingASR = StreamingASR()
 
+    TTS_SAMPLE_RATE_IN: Literal[22050] = 22050
+    TTS_SAMPLE_RATE_OUT: Literal[8000] = 8000
+
     def feed_data():
         try:
             while True:
@@ -68,18 +75,79 @@ def route_echo(ws):
                 data = json.loads(message)
                 if data["event"] == "connected":
                     current_app.logger.info("CONNECT: {}".format(message))
-                if data["event"] == "start":
+                elif data["event"] == "start":
                     current_app.logger.info("START: {}".format(message))
-                if data["event"] == "media":
+                    streaming_asr.stream_sid = data["start"]["streamSid"]
+                elif data["event"] == "media":
                     yield data["media"]["payload"]
-                if data["event"] == "closed":
+                elif data["event"] == "closed":
                     current_app.logger.info("CLOSE: {}".format(message))
                     ws.close()
                     break
+                elif data["event"] == "mark":
+                    current_app.logger.info("MARK")
+                else:
+                    current_app.logger.info(f"UNHANDLED_MSG_TYPE: {data['event']}")
         except:
             current_app.logger.exception("Something went wrong while receiving data.")
             raise
 
     for result in streaming_asr.recognize_stream(feed_data()):
-        current_app.logger.info(result)
+        try:
+            current_app.logger.info(f"ASR: {result}")
+            tts_resp = requests.post(
+                current_app.config["TTS_SERVER_URL"],
+                json={
+                    "Engine": "standard",
+                    "LanguageCode": "is-IS",
+                    "LexiconNames": [],
+                    "OutputFormat": "pcm",
+                    "SampleRate": str(TTS_SAMPLE_RATE_IN),
+                    "SpeechMarkTypes": ["word"],
+                    "Text": result,
+                    "TextType": "text",
+                    "VoiceId": current_app.config["TTS_VOICE_ID"],
+                },
+            )
+
+            if tts_resp.status_code == 200:
+                tts_audio = audioop.ratecv(
+                    tts_resp.content,
+                    2,
+                    1,
+                    TTS_SAMPLE_RATE_IN,
+                    TTS_SAMPLE_RATE_OUT,
+                    None,
+                )[0]
+                tts_audio = audioop.lin2ulaw(tts_audio, 2)
+                tts_audio = bytes.decode(base64.b64encode(tts_audio))
+
+                ws.send(
+                    json.dumps(
+                        {
+                            "event": "media",
+                            "streamSid": streaming_asr.stream_sid,
+                            "media": {
+                                "payload": tts_audio,
+                            },
+                        }
+                    )
+                )
+                ws.send(
+                    json.dumps(
+                        {
+                            "event": "mark",
+                            "streamSid": streaming_asr.stream_sid,
+                            "mark": {"name": "end_of_tts_audio"},
+                        }
+                    )
+                )
+            else:
+                current_app.logger.warning(
+                    f"TTS_REQ_FAILURE_CODE: {tts_resp.status_code}"
+                )
+        except:
+            current_app.logger.exception(
+                "Something went wrong while processing ASR data.",
+            )
     current_app.logger.info("CONNECTION CLOSED.")
