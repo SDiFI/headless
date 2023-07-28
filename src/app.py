@@ -2,10 +2,9 @@ import audioop
 import base64
 import json
 from typing import Literal
-import requests
 
+import requests
 from flask import current_app, jsonify
-from twilio.twiml.voice_response import VoiceResponse
 
 from src import sock
 from src.streaming_asr import StreamingASR
@@ -42,19 +41,6 @@ def handle_error(err):
         return jsonify({"message": message}), err.code, headers
     else:
         return jsonify({"message": message}), err.code
-
-
-@current_app.route("/call", methods=["POST"])
-def route_call():
-    try:
-        resp = VoiceResponse()
-        resp.say("Hello, you have reached the headless client.")
-        return str(resp), 200
-    except Exception as e:
-        current_app.logger.exception("Something went wrong.")
-        resp.say(
-            "The headless client is not available at this time. Please try again later."
-        )
 
 
 @sock.route("/echo")
@@ -150,4 +136,5 @@ def route_echo(ws):
             current_app.logger.exception(
                 "Something went wrong while processing ASR data.",
             )
+            raise
     current_app.logger.info("CONNECTION CLOSED.")
