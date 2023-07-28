@@ -1,6 +1,7 @@
 from marshmallow import Schema, validate
 from webargs import fields
 
+
 class Foo(Schema):
     """
     Schema description here.
@@ -43,6 +44,7 @@ class Hemi(Schema):
         description="Lorem ipsum dolor...",
         required=True,
     )
+
 
 class Error(Schema):
     message = fields.Str(required=True)
