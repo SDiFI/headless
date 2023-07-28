@@ -73,6 +73,7 @@ class StreamingASR:
             current_app.logger.exception(
                 "Something went wrong while generating ASR requests."
             )
+            raise
 
     def recognize_stream(self, media_payload: Iterable[bytes]) -> Iterable[str]:
         try:
@@ -90,3 +91,4 @@ class StreamingASR:
             current_app.logger.exception(
                 "Something went wrong during server-ASR interaction."
             )
+            raise

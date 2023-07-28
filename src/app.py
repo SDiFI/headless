@@ -80,6 +80,7 @@ def route_echo(ws):
                     break
         except:
             current_app.logger.exception("Something went wrong while receiving data.")
+            raise
 
     for result in streaming_asr.recognize_stream(feed_data()):
         current_app.logger.info(result)
