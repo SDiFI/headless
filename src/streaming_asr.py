@@ -18,6 +18,7 @@ class StreamingASR:
     _creds: Optional[grpc.ChannelCredentials] = None
 
     _stream_started: bool = False
+    _stream_sid: Optional[str] = None
 
     # These values are hard-coded for now.
     _preferred_sample_rate: int = 16000
@@ -58,6 +59,7 @@ class StreamingASR:
                     )
                 )
                 self._stream_started = True
+
             for chunk in media_payload:
                 # Change data encoding for our ASR service.
                 audio_data = base64.b64decode(chunk)
@@ -83,12 +85,21 @@ class StreamingASR:
                 for res in response.results:
                     if len(res.alternatives) > 0:
                         transcript = res.alternatives[0].transcript
-                        if res.is_final:
+                        if res.is_final and len(transcript) > 0:
                             final_transcripts.append(transcript)
-                        yield "{}{}".format("".join(final_transcripts), transcript)
-            yield "".join(final_transcripts)
+                if final_transcripts:
+                    yield "".join(final_transcripts)
+                    final_transcripts = []
         except:
             current_app.logger.exception(
                 "Something went wrong during server-ASR interaction."
             )
             raise
+
+    @property
+    def stream_sid(self):
+        return self._stream_sid
+
+    @stream_sid.setter
+    def stream_sid(self, stream_sid_val: str):
+        self._stream_sid = stream_sid_val
