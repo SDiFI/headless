@@ -1,13 +1,12 @@
-import audioop
-import base64
 import json
-from typing import Literal
+import subprocess
 
 import requests
 from flask import current_app, jsonify
 
 from src import sock
 from src.streaming_asr import StreamingASR
+from src import tts
 
 
 # TODO(Smári): Handle error codes 404 and 500
@@ -43,12 +42,19 @@ def handle_error(err):
         return jsonify({"message": message}), err.code
 
 
-@sock.route("/echo")
-def route_echo(ws):
-    streaming_asr: StreamingASR = StreamingASR()
+@sock.route("/convo")
+def route_convo(ws):
+    language_code = "is-IS"
+    conversation_url = current_app.config["MASDIF_SERVER_URL"] + "/conversations"
+    r = requests.post(conversation_url)
+    conversation_id = r.json()["conversation_id"]
 
-    TTS_SAMPLE_RATE_IN: Literal[22050] = 22050
-    TTS_SAMPLE_RATE_OUT: Literal[8000] = 8000
+    # TODO(rkjaran): There's no TTS generated for the MOTD... We need to prompt the user
+    #   somehow
+
+    # TODO(rkjaran): handle errors (and client cancellations) properly
+
+    streaming_asr = StreamingASR(conversation_id=conversation_id)
 
     def feed_data():
         try:
@@ -81,57 +87,54 @@ def route_echo(ws):
     for result in streaming_asr.recognize_stream(feed_data()):
         try:
             current_app.logger.info(f"ASR: {result}")
-            tts_resp = requests.post(
-                current_app.config["TTS_SERVER_URL"],
+
+            masdif_resp = requests.put(
+                f"{conversation_url}/{conversation_id}",
                 json={
-                    "Engine": "standard",
-                    "LanguageCode": "is-IS",
-                    "LexiconNames": [],
-                    "OutputFormat": "pcm",
-                    "SampleRate": str(TTS_SAMPLE_RATE_IN),
-                    "SpeechMarkTypes": ["word"],
-                    "Text": result,
-                    "TextType": "text",
-                    "VoiceId": current_app.config["TTS_VOICE_ID"],
+                    "text": result,
+                    "metadata": {
+                        "asr_generated": True,
+                        "language": language_code,
+                    },
                 },
             )
+            # TODO(rkjaran): handle non 200 status
+            masdif_resp.raise_for_status()
+            responses = masdif_resp.json()
 
-            if tts_resp.status_code == 200:
-                tts_audio = audioop.ratecv(
-                    tts_resp.content,
-                    2,
-                    1,
-                    TTS_SAMPLE_RATE_IN,
-                    TTS_SAMPLE_RATE_OUT,
-                    None,
-                )[0]
-                tts_audio = audioop.lin2ulaw(tts_audio, 2)
-                tts_audio = bytes.decode(base64.b64encode(tts_audio))
+            current_app.logger.info("Got responses: %s", responses)
 
-                ws.send(
-                    json.dumps(
-                        {
-                            "event": "media",
-                            "streamSid": streaming_asr.stream_sid,
-                            "media": {
-                                "payload": tts_audio,
-                            },
-                        }
-                    )
-                )
-                ws.send(
-                    json.dumps(
-                        {
-                            "event": "mark",
-                            "streamSid": streaming_asr.stream_sid,
-                            "mark": {"name": "end_of_tts_audio"},
-                        }
-                    )
-                )
-            else:
-                current_app.logger.warning(
-                    f"TTS_REQ_FAILURE_CODE: {tts_resp.status_code}"
-                )
+            for response in responses:
+                for attachment in response["data"]["attachment"]:
+                    if attachment["type"] == "audio":
+                        tts_resp = requests.get(attachment["payload"]["src"])
+                        tts_resp.raise_for_status()
+
+                        tts_audio = tts.encode_tts_response_for_twilio(tts_resp.content)
+
+                        ws.send(
+                            json.dumps(
+                                {
+                                    "event": "media",
+                                    "streamSid": streaming_asr.stream_sid,
+                                    "media": {
+                                        "payload": tts_audio,
+                                    },
+                                }
+                            )
+                        )
+                        ws.send(
+                            json.dumps(
+                                {
+                                    "event": "mark",
+                                    "streamSid": streaming_asr.stream_sid,
+                                    "mark": {"name": "end_of_tts_audio"},
+                                }
+                            )
+                        )
+
+        except subprocess.CalledProcessError as e:
+            current_app.logger.exception("Subprocess failure.")
         except:
             current_app.logger.exception(
                 "Something went wrong while processing ASR data.",
