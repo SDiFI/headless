@@ -67,6 +67,23 @@ Run the API by using the following command:
 ```
 This command sets the provided environment variables in `.env.local` and runs the API.
 
+
+## Docker container
+
+To build and run this we also provide a Dockerfile. To build run:
+
+``` shell
+docker build -t headless .
+```
+
+And then run using:
+
+``` shell
+docker run -p 5000:5000 --env-file=.env headless
+```
+
+where `.env` contains environment variables to set (see <./src/config.py>).
+
 ### API
 When this is written there is only a single endpoint called `/convo`. This is a websocket endpoint which Twilio connects to for data exchange. For additional technical info please refer to the _Implementation_ and _Installation->Twilio setup_ chapters above. This part assumes that you have followed the instructions provided in the _Installation_ chapter above.
 <br>
