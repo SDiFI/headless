@@ -6,3 +6,4 @@ werkzeug~=2.0
 marshmallow==3.18.0
 twilio==8.3.0
 grpcio~=1.58
+protobuf~=4.24

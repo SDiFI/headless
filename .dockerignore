@@ -1,0 +1,5 @@
+*
+!requirements.*
+!main.py
+!src/**/*.py
+!proto/**/*.py
