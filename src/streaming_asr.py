@@ -4,12 +4,12 @@ from typing import Iterable, Iterator, Optional
 
 import grpc
 from flask import current_app
-from lr.speech.v2beta1.speech_pb2 import (
+from proto.sdifi.speech.v1alpha.speech_pb2 import (
     RecognitionConfig,
     StreamingRecognitionConfig,
     StreamingRecognizeRequest,
 )
-from lr.speech.v2beta1.speech_pb2_grpc import SpeechStub
+from proto.sdifi.speech.v1alpha.speech_pb2_grpc import SpeechServiceStub as SpeechStub
 
 
 class StreamingASR:
@@ -24,20 +24,34 @@ class StreamingASR:
     _preferred_sample_rate: int = 16000
     _language_code: str = "is-IS"
 
-    def __init__(self) -> None:
+    _conversation_id: str
+
+    def __init__(self, /, *, conversation_id) -> None:
         self._set_creds()
         self._init_stub()
+        self._conversation_id = conversation_id
+
+    def is_secure(self) -> bool:
+        return current_app.config["ASR_SERVER_URL"].startswith("grpcs://")
 
     def _set_creds(self):
-        self.creds = grpc.composite_channel_credentials(
-            grpc.ssl_channel_credentials(),
-            grpc.access_token_call_credentials(current_app.config["TIRO_ACCESS_TOKEN"]),
+        self.creds = (
+            grpc.ssl_channel_credentials()
+            if self.is_secure()
+            else grpc.insecure_server_credentials()
         )
 
     def _init_stub(self):
-        self._channel = grpc.secure_channel(
-            current_app.config["ASR_SERVER_URL"], self.creds
-        )
+        if self.is_secure():
+            self._channel = grpc.secure_channel(
+                current_app.config["ASR_SERVER_URL"].removeprefix("grpcs://"),
+                self.creds,
+            )
+        else:
+            self._channel = grpc.insecure_channel(
+                current_app.config["ASR_SERVER_URL"].removeprefix("grpc://")
+            )
+
         self._stub = SpeechStub(self._channel)
 
     def _requests(
@@ -50,6 +64,7 @@ class StreamingASR:
             if not self._stream_started:
                 yield StreamingRecognizeRequest(
                     streaming_config=StreamingRecognitionConfig(
+                        conversation=self._conversation_id,
                         interim_results=True,
                         config=RecognitionConfig(
                             encoding=RecognitionConfig.LINEAR16,
