@@ -1,4 +1,4 @@
-Flask==2.2.2
+Flask==2.2.5
 flask-apispec==0.11.4
 Flask-Env==2.0.0
 flask-sock==0.6.0
